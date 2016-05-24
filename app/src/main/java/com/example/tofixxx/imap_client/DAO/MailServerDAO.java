@@ -1,9 +1,16 @@
 package com.example.tofixxx.imap_client.DAO;
 
+import android.app.Service;
+import android.content.Intent;
+import android.os.Binder;
+import android.os.IBinder;
+import android.support.annotation.Nullable;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import com.example.tofixxx.imap_client.IMAP.Attributes;
 import com.example.tofixxx.imap_client.IMAP.IMAPResponse;
+import com.example.tofixxx.imap_client.IMAP.IMAPResponseListener;
 import com.example.tofixxx.imap_client.IMAP.IMAPSession;
 import com.example.tofixxx.imap_client.IMAP.ResponseParser;
 import com.example.tofixxx.imap_client.IMAPClientApplication;
@@ -17,61 +24,44 @@ import java.util.List;
 /**
  * Created by TofixXx on 16.05.2016.
  */
-public class MailServerDAO{
+public class MailServerDAO extends Service implements IMAPResponseListener{
 
     private static final String LOG_TAG = IMAPClientApplication.class.getSimpleName()
             + ": " + MailServerDAO.class.getSimpleName();
 
     private static final int PORT_NUMBER = 993;
 
-    private static MailServerDAO mailServerDao;
     private IMAPSession imapSession;
 
-
-    public static MailServerDAO getInstance(){
-        return mailServerDao;
+    public IMAPSession getIMAPSession(){
+        return imapSession;
     }
 
-    public static MailServerDAO newInstance(String serverName, String username, String passw) throws IOException {
-        mailServerDao = new MailServerDAO(serverName, username, passw);
-        return mailServerDao;
-    }
-
-    private MailServerDAO(String serverName, String username, String passw) throws IOException {
-        imapSession = new IMAPSession(PORT_NUMBER, InetAddress.getByName(serverName));
+    public void connectAndLogin(String serverName, String username, String passw) throws IOException {
+        Log.d(LOG_TAG, "connect to: " + serverName + " " + username + " " + passw);
+        imapSession = new IMAPSession();
+        Log.d(LOG_TAG, (InetAddress.getByName(serverName)).toString());
+        Log.d(LOG_TAG, (InetAddress.getByName(serverName)).toString());
+        imapSession.connectTo(PORT_NUMBER, InetAddress.getByName(serverName), this);
         imapSession.login(username, passw);
     }
 
-    public IMAPResponse moveToINBOX() throws IOException {
-        return imapSession.examine("INBOX");
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        Log.d(LOG_TAG, "onBind");
+        return new MyBinder();
     }
 
-    public MailMessage getMessage(int number) throws IOException {
-        IMAPResponse messageDate = imapSession.fetch(number, Attributes.INTERNALDATE);
-        IMAPResponse fullText = imapSession.fetch(number
-                , String.format("%s[%s]", Attributes.BODY, Attributes.TEXT));
-        IMAPResponse from = imapSession.fetch(number, String.format("%s[%s.%s (%s)]"
-                , Attributes.BODY, Attributes.HEADER, Attributes.FIELDS, Attributes.FROM));
-        MailMessage mailMessage = new MailMessage(ResponseParser.getDateFromResponse(messageDate.msg)
-                , ResponseParser.getSenderFromResponse(from.msg)
-                , fullText.msg);
-        return mailMessage;
+    @Override
+    public void onResponseReceived(IMAPResponse response) {
+        sendBroadcast(new Intent("response")
+                        .putExtra("message", response));
     }
 
-    public List<MailMessage> getAllMessages(int offset, int num) throws IOException {
-        Log.d(LOG_TAG, "getAllMessages, num: " + Integer.toString(num) + " offset: " + Integer.toString(offset));
-        List<MailMessage> mailMessageList = new ArrayList<>();
-        for(int i=0; i<20 && num-(offset+i) > 0; i++){
-            Log.d(LOG_TAG, "getMessage, num: " + Integer.toString(num-(offset+i)));
-            IMAPResponse shortText = imapSession.fetch(num - (offset + i)
-                    , String.format("%s[%s]<0.10>", Attributes.BODY, Attributes.TEXT));
-            IMAPResponse from = imapSession.fetch(num - (offset + i), String.format("%s[%s.%s (%s)]"
-                    , Attributes.BODY, Attributes.HEADER, Attributes.FIELDS, Attributes.FROM));
-            MailMessage msg = new MailMessage(null
-                    , ResponseParser.getSenderFromResponse(from.msg)
-                    , shortText.msg);
-            mailMessageList.add(msg);
+    public class MyBinder extends Binder{
+        public MailServerDAO getService(){
+            return MailServerDAO.this;
         }
-        return mailMessageList;
     }
 }

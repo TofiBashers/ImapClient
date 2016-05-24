@@ -55,8 +55,12 @@ public class ShortMessagesListAdapter extends BaseAdapter{
         if(convertView == null){
             convertView = LayoutInflater.from(context)
                     .inflate(R.layout.message_list_elem, parent, false);
-            fromTextView = (TextView) convertView.findViewById(R.id.fromTextView);
+            fromTextView = (TextView) convertView.findViewById(R.id.senderTextView);
             messageTextView = (TextView) convertView.findViewById(R.id.shortMessageTextView);
+            ViewHolder viewHolder = new ViewHolder();
+            viewHolder.fromTextView = fromTextView;
+            viewHolder.messageTextView = messageTextView;
+            convertView.setTag(viewHolder);
         }
         else{
             fromTextView = ((ViewHolder)convertView.getTag()).fromTextView;
@@ -65,12 +69,14 @@ public class ShortMessagesListAdapter extends BaseAdapter{
         fromTextView.setText(mailMessageList.get(position).from);
         messageTextView.setText(mailMessageList.get(position).text);
         ((ViewHolder)convertView.getTag()).position = position;
+        ((ViewHolder)convertView.getTag()).uid = mailMessageList.get(position).uid;
         return convertView;
     }
 
     public static class ViewHolder{
-        int position;
-        TextView fromTextView;
-        TextView messageTextView;
+        public int position;
+        public String uid;
+        public TextView fromTextView;
+        public TextView messageTextView;
     }
 }

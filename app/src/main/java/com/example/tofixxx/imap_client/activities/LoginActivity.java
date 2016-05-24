@@ -1,7 +1,12 @@
 package com.example.tofixxx.imap_client.activities;
 
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
-import android.os.AsyncTask;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -10,6 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 
+import com.example.tofixxx.imap_client.IMAP.IMAPResponse;
 import com.example.tofixxx.imap_client.IMAPClientApplication;
 import com.example.tofixxx.imap_client.DAO.MailServerDAO;
 import com.example.tofixxx.imap_client.R;
@@ -25,6 +31,8 @@ public class LoginActivity extends AppCompatActivity implements View.OnClickList
     EditText userNameEditText;
     EditText passwEditText;
 
+    MailServerDAO dao;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -35,52 +43,48 @@ public class LoginActivity extends AppCompatActivity implements View.OnClickList
         passwEditText = (EditText) findViewById(R.id.passwEditText);
         Button signIn = (Button) findViewById(R.id.sign_in);
         signIn.setOnClickListener(this);
+        registerReceiver(IMAPReceiver, new IntentFilter("response"));
+        startService(new Intent(this, MailServerDAO.class));
+        bindService(new Intent(this, MailServerDAO.class), sConn, 0);
     }
+
+    ServiceConnection sConn = new ServiceConnection() {
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            Log.d(LOG_TAG, "MailBoxActivity onServiceConnected");
+            dao = ((MailServerDAO.MyBinder)binder).getService();
+        }
+
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d(LOG_TAG, "MailBoxActivity onServiceDisconnected");
+        }
+    };
 
     @Override
     public void onClick(View v) {
-        userNameEditText.getText().toString();
-        LoginTask task = new LoginTask((String) spinner.getSelectedItem()
-                , userNameEditText.getText().toString()
-                , passwEditText.getText().toString());
-        task.execute();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    dao.connectAndLogin((String) spinner.getSelectedItem()
+                            , userNameEditText.getText().toString()
+                            , passwEditText.getText().toString());
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
-    public class LoginTask extends AsyncTask<Void, Void, Void> {
-
-        private final String LOG_TAG = IMAPClientApplication.class.getSimpleName()
-                + ": " + LoginTask.class.getSimpleName();
-
-        private String username;
-        private String passw;
-        private String server;
-
-        LoginTask(String server, String username, String passw){
-            super();
-            this.username = username;
-            this.passw = passw;
-            this.server = server;
-        }
+    public BroadcastReceiver IMAPReceiver = new BroadcastReceiver() {
 
         @Override
-        protected Void doInBackground(Void... params) {
-            Log.d(LOG_TAG, "Login started with server: " + server
-                    + " username: " + username + "password: " + passw);
-            try {
-                MailServerDAO dao = MailServerDAO.newInstance(server, username, passw);
-                dao.moveToINBOX();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            super.onPostExecute(aVoid);
-            Log.d(LOG_TAG, "onPostExecute");
+        public void onReceive(Context context, Intent intent) {
+            IMAPResponse response = (IMAPResponse) intent.getSerializableExtra("message");
+            Log.d(LOG_TAG, "get response: " + response.msg);
             startActivity(new Intent(LoginActivity.this, MailBoxActivity.class));
+            unregisterReceiver(IMAPReceiver);
             finish();
         }
-    }
+    };
 }
